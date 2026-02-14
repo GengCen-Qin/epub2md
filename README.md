@@ -81,6 +81,53 @@ converter.convert_to_markdown(output_dir: './output')
 converter.convert_to_single_markdown(output_filename: './output/merged_book.md')
 ```
 
+#### Get EPUB Information
+
+```ruby
+require 'epub2md'
+
+parser = Epub2md::Parser.new('path/to/book.epub')
+parser.parse
+
+# Get metadata
+parser.metadata  # => { title: "...", author: "...", description: "...", language: "...", publisher: "..." }
+
+# Get statistics
+parser.sections.length    # Number of sections/chapters
+parser.manifest.length    # Number of manifest items
+
+# Get table of contents
+parser.structure  # Array of TOC items with :name, :path, :children
+
+# Get all sections
+parser.sections  # Array of sections, each contains :id, :path, :html_content, :title
+```
+
+#### Control `--localize` Option
+
+Use the `localize_images:` parameter in the Converter:
+
+```ruby
+require 'epub2md'
+
+parser = Epub2md::Parser.new('path/to/book.epub')
+parser.parse
+
+converter = Epub2md::Converter.new(parser)
+
+# Convert to multiple markdown files with image localization (equivalent to --localize)
+converter.convert_to_markdown(
+  localize_images: true,    # Enable image extraction to local directory
+  output_dir: './output'
+)
+
+# Convert to a single merged markdown file with image localization
+converter.convert_to_single_markdown(
+  localize_images: true,
+  output_filename: './output/book.md'
+)
+```
+
 ## Development
 
 After checking out the repo, run `bundle install` to install dependencies. Then, run `bundle exec rspec` to run the tests.
