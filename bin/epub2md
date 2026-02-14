@@ -1,0 +1,145 @@
+#!/usr/bin/env ruby
+
+require 'thor'
+require_relative '../lib/epub2md'
+
+module Epub2md
+  # Command-line interface for the EPUB to Markdown converter
+  class CLI < Thor
+    class_option :verbose, type: :boolean, default: false, desc: 'Enable verbose output'
+
+    # Convert EPUB file to multiple Markdown files
+    desc 'convert PATH', 'Convert EPUB file to multiple Markdown files'
+    option :output, aliases: '-o', type: :string, desc: 'Output directory'
+    option :localize, type: :boolean, default: false, desc: 'Extract images to local directory'
+    def convert(path)
+      validate_epub_path(path)
+      setup_verbose_logging
+      
+      parser = Parser.new(path)
+      parser.parse
+      
+      converter = Converter.new(parser)
+      output_dir = options[:output] || File.dirname(path) + "/#{File.basename(path, '.epub')}_markdown"
+      
+      puts "Converting #{path} to Markdown files..." if options[:verbose]
+      files = converter.convert_to_markdown(
+        localize_images: options[:localize],
+        output_dir: output_dir
+      )
+      
+      puts "Conversion complete! Created #{files.length} Markdown files in: #{output_dir}"
+      files.each { |file| puts "  - #{file}" } if options[:verbose]
+    end
+
+    desc 'merge PATH', 'Convert EPUB file to a single Markdown file'
+    option :output, aliases: '-o', type: :string, desc: 'Output filename'
+    option :localize, type: :boolean, default: false, desc: 'Download and localize remote images'
+    def merge(path)
+      validate_epub_path(path)
+      setup_verbose_logging
+
+      parser = Parser.new(path)
+      parser.parse
+
+      converter = Converter.new(parser)
+      output_file = options[:output] || File.dirname(path) + "/#{File.basename(path, '.epub')}_merged.md"
+
+      puts "Converting #{path} to single Markdown file..." if options[:verbose]
+      result = converter.convert_to_single_markdown(
+        localize_images: options[:localize],
+        output_filename: output_file
+      )
+
+      puts "Merged conversion complete! Created: #{result}"
+    end
+
+    desc 'info PATH', 'Show basic information about the EPUB file'
+    option :json, type: :boolean, default: false, desc: 'Output information in JSON format'
+    def info(path)
+      validate_epub_path(path)
+
+      parser = Parser.new(path)
+      parser.parse
+
+      if options[:json]
+        # Output in JSON format
+        info_data = {
+          file: File.basename(path),
+          metadata: parser.metadata,
+          stats: {
+            sections_count: parser.sections.length,
+            manifest_items_count: parser.manifest.length
+          }
+        }
+        require 'json'
+        puts JSON.pretty_generate(info_data)
+      else
+        # Output in human-readable format
+        puts "EPUB Information for: #{File.basename(path)}"
+        puts "Title: #{parser.metadata[:title] || 'Unknown'}"
+        puts "Author: #{parser.metadata[:author] || 'Unknown'}"
+        puts "Language: #{parser.metadata[:language] || 'Unknown'}"
+        puts "Publisher: #{parser.metadata[:publisher] || 'Unknown'}"
+        puts "Description: #{parser.metadata[:description] || 'None'}"
+        puts "Number of sections: #{parser.sections.length}"
+        puts "Number of manifest items: #{parser.manifest.length}"
+      end
+    end
+
+    desc 'structure PATH', 'Show the structure of the EPUB file'
+    def structure(path)
+      validate_epub_path(path)
+
+      parser = Parser.new(path)
+      parser.parse
+
+      puts "EPUB Structure for: #{File.basename(path)}"
+      print_structure(parser.structure)
+    end
+
+    desc 'sections PATH', 'List all sections/chapters in the EPUB file'
+    def sections(path)
+      validate_epub_path(path)
+
+      parser = Parser.new(path)
+      parser.parse
+
+      puts "Sections in: #{File.basename(path)}"
+      parser.sections.each_with_index do |section, index|
+        title = section[:title] || 'Untitled'
+        puts "#{index + 1}. #{title} (ID: #{section[:id]})"
+      end
+    end
+
+    private
+
+    def validate_epub_path(path)
+      unless File.exist?(path)
+        puts "Error: File does not exist: #{path}"
+        exit(1)
+      end
+
+      unless path.end_with?('.epub')
+        puts "Error: File is not an EPUB: #{path}"
+        exit(1)
+      end
+    end
+
+    def setup_verbose_logging
+      $VERBOSE = true if options[:verbose]
+    end
+
+    def print_structure(items, level = 0)
+      indent = "  " * level
+      items.each do |item|
+        puts "#{indent}- #{item[:name] || 'Unnamed'} (#{item[:path] || 'No path'})"
+        print_structure(item[:children], level + 1) if item[:children]
+      end
+    end
+  end
+end
+
+if __FILE__ == $0
+  Epub2md::CLI.start(ARGV)
+end
